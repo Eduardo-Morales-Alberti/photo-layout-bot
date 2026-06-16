@@ -69,7 +69,9 @@ In Telegram, open your bot and:
 - `/start` — instructions
 - Send one or more photos. **For best quality send them as files** (paperclip →
   *File*), so Telegram doesn't pre-compress them. Take your time.
-- When you're done adding images, send `/process` to build and receive the pages.
+- When you're done adding images, send `/process`. If the last page still has a
+  meaningful amount of free space, the bot asks whether to **add another image**
+  or **process now** (inline buttons).
 - `/reset` — discard the current batch.
 
 ## Configuration reference

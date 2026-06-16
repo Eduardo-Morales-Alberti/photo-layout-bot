@@ -11,9 +11,15 @@ import io
 import logging
 
 from PIL import Image
-from telegram import InputFile, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputFile,
+    Update,
+)
 from telegram.ext import (
     Application,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
     MessageHandler,
@@ -21,7 +27,7 @@ from telegram.ext import (
 )
 
 from config import load_settings
-from layout import compose_pages
+from layout import compose_pages, has_room_for_more
 
 logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s", level=logging.INFO
@@ -36,7 +42,8 @@ WELCOME = (
     "(max 13x16 cm each, aspect ratio kept, rotated when it helps).\n\n"
     "• For best quality, send the images *as files* (no compression).\n"
     "• Add as many as you like — take your time.\n"
-    "• When you're done, send /process and I'll build the pages.\n"
+    "• When you're done, send /process. If the last page still has room "
+    "I'll ask whether to add another image or go ahead.\n"
     "• /reset clears the current batch.\n"
 )
 
@@ -97,7 +104,47 @@ async def process(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     for job in context.job_queue.get_jobs_by_name(str(chat_id)):
         job.schedule_removal()
+
+    images = context.chat_data.get("images", [])
+    if not images:
+        await context.bot.send_message(chat_id, "No images yet — send some photos first.")
+        return
+
+    # If another image would still fit on the last page, ask before sending.
+    try:
+        room = has_room_for_more(images, SETTINGS.layout)
+    except Exception:  # noqa: BLE001
+        log.exception("Room check failed")
+        room = False
+
+    if room:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Add another image", callback_data="add_more")],
+            [InlineKeyboardButton("✅ Process now", callback_data="do_process")],
+        ])
+        await context.bot.send_message(
+            chat_id,
+            f"There's still room on the last page for another image "
+            f"({len(images)} so far). Add one to fill the space, or process now?",
+            reply_markup=keyboard,
+        )
+        return
+
     await _render_and_send(context, chat_id)
+
+
+async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the 'Add another image' / 'Process now' inline buttons."""
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat_id
+    if query.data == "do_process":
+        await query.edit_message_text("📦 Processing…")
+        await _render_and_send(context, chat_id)
+    elif query.data == "add_more":
+        await query.edit_message_text(
+            "👍 Send the additional photo(s), then /process again."
+        )
 
 
 async def _render_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> None:
@@ -139,6 +186,7 @@ def main() -> None:
     app.add_handler(CommandHandler(["start", "help"], start))
     app.add_handler(CommandHandler(["process", "done"], process))
     app.add_handler(CommandHandler("reset", reset))
+    app.add_handler(CallbackQueryHandler(on_button))
     app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, collect))
 
     log.info("Bot started (polling).")

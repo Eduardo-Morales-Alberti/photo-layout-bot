@@ -293,15 +293,15 @@ def _sizes_at(dims, s: Settings, f: float, usable_w: int, usable_h: int):
     return raw
 
 
-def compose_pages(images: List[Image.Image], s: Settings) -> List[Image.Image]:
-    """Compose images onto A4 pages, shrinking within [min, max] box to fit more.
+def _plan(images: List[Image.Image], s: Settings):
+    """Choose the best scale and packing. Returns (f, raw_sizes, bins, oriented).
 
     Tries box scales from the max box down to the min box and keeps the
     arrangement with the fewest pages (least whitespace); among ties it keeps
     the largest scale, so images stay as big as allowed. Only dimensions are
-    used during the search — pixels are resized once, for the chosen scale.
+    used during the search — pixels are resized once, when rendering.
     """
-    _, _, margin, gap, usable_w, usable_h = _geometry(s)
+    _, _, _, gap, usable_w, usable_h = _geometry(s)
 
     oriented = [ImageOps.exif_transpose(img) for img in images]
     dims = [im.size for im in oriented]
@@ -316,5 +316,31 @@ def compose_pages(images: List[Image.Image], s: Settings) -> List[Image.Image]:
             best = (score, f, raw, bins)
 
     _, f, raw, bins = best
+    return f, raw, bins, oriented
+
+
+def compose_pages(images: List[Image.Image], s: Settings) -> List[Image.Image]:
+    """Compose images onto A4 pages (pack, grow-to-fill, render)."""
+    _, _, margin, _, usable_w, usable_h = _geometry(s)
+    f, raw, bins, oriented = _plan(images, s)
     pages = _grow_to_fill(bins, raw, f, usable_w, usable_h, s.fill_page)
     return _render(pages, oriented, s, margin)
+
+
+def has_room_for_more(images: List[Image.Image], s: Settings) -> bool:
+    """True if the last page has at least one min-box worth of free space.
+
+    Uses leftover area (before the cosmetic grow-to-fill step): if the empty
+    space on the last page is as large as a minimum-size image, another image
+    is worth offering, even if the gap's shape would not hold it exactly.
+    """
+    if not images:
+        return False
+    _, _, _, _, usable_w, usable_h = _geometry(s)
+    _f, raw, bins, _oriented = _plan(images, s)
+    last = bins[-1]
+
+    used = sum(raw[idx][0] * raw[idx][1] for idx, *_rest in last)
+    free = usable_w * usable_h - used
+    min_box = cm_to_px(s.min_short_cm, s.dpi) * cm_to_px(s.min_long_cm, s.dpi)
+    return free >= min_box
