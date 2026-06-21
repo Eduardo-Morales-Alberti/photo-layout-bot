@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import logging
+from datetime import datetime
 
 from PIL import Image
 from telegram import (
@@ -163,6 +164,7 @@ async def _render_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> 
 
     ext = "png" if SETTINGS.out_format == "PNG" else "jpg"
     dpi = SETTINGS.layout.dpi
+    ts = datetime.now().strftime("%y%m%d%H%M%S")
     for i, page in enumerate(pages, 1):
         bio = io.BytesIO()
         if SETTINGS.out_format == "PNG":
@@ -173,7 +175,7 @@ async def _render_and_send(context: ContextTypes.DEFAULT_TYPE, chat_id: int) -> 
         bio.seek(0)
         await context.bot.send_document(
             chat_id,
-            document=InputFile(bio, filename=f"page_{i}.{ext}"),
+            document=InputFile(bio, filename=f"picture_bot_{ts}_{i}.{ext}"),
             caption=f"Page {i}/{len(pages)}",
         )
 
