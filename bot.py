@@ -151,7 +151,7 @@ def main() -> None:
     app.add_handler(CommandHandler(["start", "help"], start))
     app.add_handler(CommandHandler(["process", "done"], process))
     app.add_handler(CommandHandler("reset", reset))
-app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, collect))
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, collect))
 
     log.info("Bot started (polling).")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
