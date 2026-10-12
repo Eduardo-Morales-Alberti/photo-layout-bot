@@ -11,8 +11,13 @@ from layout import Settings
 class AppSettings:
     bot_token: str
     debounce_seconds: float
-    out_format: str          # "PNG" or "JPEG"
-    jpeg_quality: int
+    out_format: str          # "PDF", "PNG" or "JPEG"
+    jpeg_quality: int        # JPEG quality (the starting quality for PDF)
+    max_pdf_bytes: int
+    min_jpeg_quality: int    # PDF: lowest quality tried to stay under the limit
+    min_dpi: int             # PDF: lowest DPI tried to stay under the limit
+    low_dpi_warning: int     # warn when an image prints below this DPI
+    hold_partial_page: bool  # keep a not-full last page queued and ask first
     layout: Settings
 
 
@@ -46,14 +51,20 @@ def load_settings() -> AppSettings:
         fill_page=_b("FILL_PAGE", True),
     )
 
-    out_format = os.getenv("OUT_FORMAT", "PNG").strip().upper()
-    if out_format not in ("PNG", "JPEG"):
-        out_format = "PNG"
+    out_format = os.getenv("OUT_FORMAT", "PDF").strip().upper()
+    if out_format not in ("PDF", "PNG", "JPEG"):
+        out_format = "PDF"
 
     return AppSettings(
         bot_token=token,
-        debounce_seconds=_f("DEBOUNCE_SECONDS", 2.5),
+        debounce_seconds=_f("DEBOUNCE_SECONDS", 1.5),
         out_format=out_format,
         jpeg_quality=_i("JPEG_QUALITY", 95),
+        # Bots can upload documents of up to 50 MB; keep a safety margin.
+        max_pdf_bytes=int(_f("MAX_PDF_MB", 45) * 1024 * 1024),
+        min_jpeg_quality=_i("MIN_JPEG_QUALITY", 75),
+        min_dpi=_i("MIN_DPI", 200),
+        low_dpi_warning=_i("LOW_DPI_WARNING", 150),
+        hold_partial_page=_b("HOLD_PARTIAL_PAGE", True),
         layout=layout,
     )
